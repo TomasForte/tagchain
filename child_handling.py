@@ -43,15 +43,15 @@ def start_multiprocesses(chains_by_node_main_loop, chains_by_node_max_update, no
     #NOTE this process will loop every possible chain and updated the maxium chain of the node in the matrix
     with multiprocessing.Pool(
                 processes = settings["number_processes"], initializer = multiprocessing_max_update.init_arr, 
-                initargs = (task_stack, boolean_matrix_mask,nodes, matrix_out,
+                initargs = (task_stack, boolean_matrix_mask,nodes, matrix_shared_array, matrix_out,
                             task_counter, max_chain_shared, chain_lock, settings["batch_size"], settings["number_processes"]),
                 maxtasksperchild = settings["max_task_per_process"]) as pool:
         i=0
 
         for chains in chains_by_node_max_update:
-            max_chain_shared.value = 0
+            max_chain_shared.value = 1
             task_stack.extend(chains[1])
-            max_local = 0
+            max_local = 1
             start_node = chains[0]
             task_counter.value = 0
             counter = 0
@@ -75,7 +75,7 @@ def start_multiprocesses(chains_by_node_main_loop, chains_by_node_max_update, no
                         counter +=1
                         
 
-                        if counter % 250 == 0:
+                        if counter % 100 == 0:
                             logging.info("MAX UPDATE LOOP: status node id - "+str(node_id)+", id - " +str(chains[1][0][1][0])+
                             ", counter - " + str(counter)+", task counter - " + str(task_counter.value) + ", tasks - "+ str(len(task_stack)))
                     
@@ -95,15 +95,19 @@ def start_multiprocesses(chains_by_node_main_loop, chains_by_node_max_update, no
             
                         
             # Update the the max of the node in the shared matrix and save the matrix
-            if max_chain_shared.value > 0:
+            if max_chain_shared.value > 1:
                 with matrix_lock:
                     try:
-                        if shared_matrix[:,start_node].max() < max_chain_shared.value:
+                        print("before " + str(shared_matrix[:,start_node].max() ))
+                        print("after " + str(max_chain_shared.value))
+                        old_max = shared_matrix[:,start_node].max()
+                        #the old > 0 bit is because if there no other node that conects to it max was not calculated
+                        # tecnically I don't even need to update the max of this node the no other node that connects to it
+                        if (old_max < max_chain_shared.value) & (old_max > 0):
                             logging.error("start relations matrix setup logic is incorrect")
                             exit(1)
-                        print("before " + str(shared_matrix[:,start_node].max() ))
                         shared_matrix[shared_matrix[:, start_node] > 0, start_node] = max_chain_shared.value
-                        print("after " + str(shared_matrix[:,start_node].max() ))
+                        
                         aux = shared_matrix[:,start_node]
                         logging.info("MAX UPDATE LOOP: concluded node " + str(start_node) +", max " + str(max_chain_shared.value))
                         with open(r'previous_run\array.npy', 'wb') as file:    

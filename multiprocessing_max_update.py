@@ -27,7 +27,7 @@ def error_callback (e):
 
 
 
-def init_arr(task_stack, boolean_matrix_mask, nodes, matrix_out, task_counter, max_chain, chain_lock, batch_size, number_processes):
+def init_arr(task_stack, boolean_matrix_mask, nodes, shared_matrix_array, matrix_out, task_counter, max_chain, chain_lock, batch_size, number_processes):
     #NOTE although task_stack is no a constant i decided to pass as global variable to avoid having to pass a big list between process 
     globals()['task_stack'] = task_stack
     globals()["task_counter"] = task_counter
@@ -38,6 +38,8 @@ def init_arr(task_stack, boolean_matrix_mask, nodes, matrix_out, task_counter, m
     globals()["matrix_out"] = matrix_out
     globals()["batch_size"] = batch_size
     globals()["number_processes"] = number_processes
+    shared_matrix = np.frombuffer(shared_matrix_array, dtype='int32').reshape(matrix_out.shape)
+    globals()["shared_matrix"] = shared_matrix
     # profiler = cProfile.Profile()
     # profiler.enable()
     # globals()["profiler"] = profiler 
@@ -59,11 +61,14 @@ def max_update(chain, current_max):
         global batch_size
         global number_processes
         global profiler
+        global shared_matrix 
+        test = shared_matrix > 0
         # profiler = cProfile.Profile()
         # profiler.enable()
         counter = 1
         chains = [chain]
         local_max = current_max
+
         while chains:
             while counter < batch_size and chains:
                 chain = chains.pop()
@@ -91,15 +96,18 @@ def max_update(chain, current_max):
                 # impossible_nodes[nodes_out] = True
                 # next_nodes = np.where((connect_nodes == True) & (impossible_nodes == False))[0]
                 #option5------
-                connect_nodes = boolean_matrix_mask[chain_index,:]
-                next_nodes = np.where(connect_nodes & ~nodes_out)[0]
+                connect_nodes = shared_matrix[chain_index,:]
+
+                next_nodes = np.where((connect_nodes > (local_max - size)) & (~nodes_out))[0]
                 n_next_nodes = next_nodes.size
                 counter += 1
+                if len(chains)> 500:
+                    print("wtg")
 
                 #check if there're possible nextnodes
                 if n_next_nodes >= 1:
                     next_size = size + 1
-                    if local_max < next_size:
+                    if next_size > local_max:
                         local_max = next_size
 
                     #if there is more than one nextnode append to chains
@@ -201,6 +209,10 @@ def max_update(chain, current_max):
                 #if there is only 1 chain there's no need to add it to the process
                 else:
                     counter = 0
+                if local_max > current_max:
+                    with max_chain.get_lock():
+                        if local_max > max_chain.value:          
+                            max_chain.value = local_max
         # sortby = SortKey.CUMULATIVE
         # ps = pstats.Stats(profiler).sort_stats(sortby)
         # ps.print_stats(10) 

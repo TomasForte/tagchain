@@ -79,12 +79,15 @@ def setup_shared_variables(df, df_nodes):
         entries_same_date = helper[helper["finish1"] == helper["finish2"]]["id2"].nunique()
         # remove relations that link nodes with the same finish date
         helper = helper[helper["finish1"] != helper["finish2"]]
+        uniquenode = helper["node_id2"].unique()        
+        # merge section the relations df        
+        helper = df[df["node_id1"].isin(uniquenode)]
 
-        # merge section the relations df
-        helper = helper.merge(df, left_on=["tag_id2","id2"], right_on=["tag_id1","id1"])
 
         # get max fot section
-        max_chain = helper["max_chain_y"].max()
+        max_chain = helper["max_chain"].max()
+        if pd.isna(max_chain) or max_chain < 2:
+            print("foda-se")
         # if no max the max is the default else the max_chain + 1
         max_chain = 2 if pd.isna(max_chain) else max_chain + 1
         # add the number of nodes with the same date as in the best case scenario they can link with ona another
@@ -99,9 +102,11 @@ def setup_shared_variables(df, df_nodes):
     #update the relations matrix the max_chain of the nodes
     max_chain_values = df.groupby("node_id1")["max_chain"].max()
     for  node_id, max_value in max_chain_values.items():
+        print("node_id: " + str(max_value))
         matrix[matrix[:, node_id] > 0, node_id] = max_value
 
-
+    test = df[df["id1"]==48512]
+    test2 = df[df["tag_id2"]==140]
 
     #build matrix with the nodes out based on each node
     matrix_out = np.zeros((nodes_size, nodes_size), dtype=bool)
