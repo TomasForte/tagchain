@@ -2,10 +2,29 @@ import numpy as np
 from queue import Empty
 import json
 import gc
-import line_profiler
 import time
 import tracemalloc
 import logging
+from numba import jit
+import cProfile
+import pstats
+from pstats import SortKey
+import pstats
+from pstats import SortKey
+
+
+#NOTE THE error_callback as well as the callback arg of apply_asynch are run in the main process
+#so task_counter is not accessible in this function 
+#TODO find away to update task_count when function fail to keep number of task_corrected
+def error_callback (e):
+    try:
+        logging.error(f"Error occurred: {e}")
+        with task_counter.get_lock():  # Ensure thread-safe access
+            task_counter.value -= 1
+    except Exception as e:
+        print(f"Error in error_callback: {e}")
+
+
 
 
 def init_arr(task_stack, boolean_matrix_mask, nodes, matrix_out, task_counter, max_chain, chain_lock, batch_size, number_processes):
@@ -19,16 +38,15 @@ def init_arr(task_stack, boolean_matrix_mask, nodes, matrix_out, task_counter, m
     globals()["matrix_out"] = matrix_out
     globals()["batch_size"] = batch_size
     globals()["number_processes"] = number_processes
+    # profiler = cProfile.Profile()
+    # profiler.enable()
+    # globals()["profiler"] = profiler 
 
-def error_callback (e):
-    print(f"Error occurred: {e}")
-    with task_counter.get_lock():  # Ensure thread-safe access
-        task_counter.value -= 1
 
 #https://stackoverflow.com/questions/64222805/how-to-pass-2d-array-as-multiprocessing-array-to-multiprocessing-pool
 
 
-def max_update(chain, max):
+def max_update(chain, current_max):
      
     try:
         global task_stack
@@ -40,10 +58,12 @@ def max_update(chain, max):
         global matrix_out
         global batch_size
         global number_processes
-
+        global profiler
+        # profiler = cProfile.Profile()
+        # profiler.enable()
         counter = 1
         chains = [chain]
-        local_max = max
+        local_max = current_max
         while chains:
             while counter < batch_size and chains:
                 chain = chains.pop()
@@ -72,7 +92,7 @@ def max_update(chain, max):
                 # next_nodes = np.where((connect_nodes == True) & (impossible_nodes == False))[0]
                 #option5------
                 connect_nodes = boolean_matrix_mask[chain_index,:]
-                next_nodes = np.where((connect_nodes == True) & (nodes_out == False))[0]
+                next_nodes = np.where(connect_nodes & ~nodes_out)[0]
                 n_next_nodes = next_nodes.size
                 counter += 1
 
@@ -181,20 +201,27 @@ def max_update(chain, max):
                 #if there is only 1 chain there's no need to add it to the process
                 else:
                     counter = 0
+        # sortby = SortKey.CUMULATIVE
+        # ps = pstats.Stats(profiler).sort_stats(sortby)
+        # ps.print_stats(10) 
 
 
     except Exception as e:
         logging.error(f"Error in max_update: {e}")
 
+    try:
+        if local_max > current_max:
+            with max_chain.get_lock():
+                if local_max > max_chain.value:          
+                    max_chain.value = local_max
+    except Exception as e:
+        logging.error(f"Error in updating max_chain: {e}")
 
-    if local_max > max:
-        with max_chain.get_lock():
-            if local_max > max_chain.value:          
-                max_chain.value = local_max
-
-    #update the task_counter to indicate that a process has finished
-    with task_counter.get_lock():
-        task_counter.value -= 1
+    try:    
+        with task_counter.get_lock():
+            task_counter.value -= 1
+    except Exception as e:
+        logging.error(f"Error in updating task_counter: {e}")
 
     return None
 

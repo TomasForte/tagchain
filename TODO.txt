@@ -1,0 +1,8 @@
+--Handle the error that happens while trying to open a file
+
+--Try to handle the max_update loop inside the child to remove whe while true loop
+Maybe use the callback arg of apply_async to call apply_async
+
+--Instead of  storing values of corrent run every loop only store them when program stops
+
+--In the main loop change the way the chain_found is store to clear the list after being saved

@@ -7,11 +7,12 @@ import logging
 import cProfile
 import pstats
 import tracemalloc
-import psutil
+#import psutil
 import pandas as pd
 
+
    
-         
+       
 def start_multiprocesses(chains_by_node_main_loop, chains_by_node_max_update, nodes_size, nodes, matrix_out, settings, shared_vars):   
     """start the main loop to build and pool to update the max chain of nodes in shared_matrix"""
     
@@ -48,7 +49,7 @@ def start_multiprocesses(chains_by_node_main_loop, chains_by_node_max_update, no
         i=0
 
         for chains in chains_by_node_max_update:
-
+            max_chain_shared.value = 0
             task_stack.extend(chains[1])
             max_local = 0
             start_node = chains[0]
@@ -57,46 +58,73 @@ def start_multiprocesses(chains_by_node_main_loop, chains_by_node_max_update, no
             node_id = chains[0]
             logging.info("MAX UPDATE LOOP: starting node - "+ str(chains[1][0][0]) +", id - " +str(chains[1][0][1][0]))
 
-            #TODO 
-            while True:
-                # Check if there are tasks in the stack and available processes
-                if (task_stack) and (task_counter.value < settings["number_processes"]):
-                    #I had put this outside the child because when the counter was added inside the process
-                    #the main process would have requests a bunch of new taks because "task_counter.value < number_processes"
-                    with chain_lock:
-                        chain = task_stack.pop()
-                    with task_counter.get_lock():
-                        task_counter.value += 1
-                    
-                    if max_chain_shared.value > max_local:
-                        max_local = max_chain_shared.value 
-                    counter +=1
+            try:
+                #TODO
+                while True:
+                    # Check if there are tasks in the stack and available processes
+                    if (task_stack) and (task_counter.value < settings["number_processes"]):
+                        #I had put this outside the child because when the counter was added inside the process
+                        #the main process would have requests a bunch of new taks because "task_counter.value < number_processes"
+                        with chain_lock:
+                            chain = task_stack.pop()
+                        with task_counter.get_lock():
+                            task_counter.value += 1
+                        
+                        if max_chain_shared.value > max_local:
+                            max_local = max_chain_shared.value 
+                        counter +=1
+                        
+
+                        if counter % 250 == 0:
+                            logging.info("MAX UPDATE LOOP: status node id - "+str(node_id)+", id - " +str(chains[1][0][1][0])+
+                            ", counter - " + str(counter)+", task counter - " + str(task_counter.value) + ", tasks - "+ str(len(task_stack)))
                     
 
-                    if counter % 250 == 0:
-                        logging.info("MAX UPDATE LOOP: status node id - "+str(node_id)+", id - " +str(chains[1][0][1][0])+
-                        ", counter - " + str(counter)+", task counter - " + str(task_counter.value) + ", tasks - "+ str(len(task_stack)))
-                
+                        pool.apply_async(multiprocessing_max_update.max_update, args=(chain, max_local), 
+                                        error_callback = multiprocessing_max_update.error_callback)
+                        
+                    elif (not task_stack) and (task_counter.value ==  0):
+                        # If there are no tasks in the queue and all processes are done, break the loop
+                        break
+            except Exception as e:
+                logging.error(f"Program stop: {e}")
+                pool.terminate()
+                pool.join()
+                break
 
-                    pool.apply_async(multiprocessing_max_update.max_update, args=(chain, max_local), 
-                                    error_callback = multiprocessing_max_update.error_callback)
-                    
-                elif (not task_stack) and (task_counter.value ==  0):
-                    # If there are no tasks in the queue and all processes are done, break the loop
-                    break
             
-            # TODO I don't think i need the lock since the matrix is not updade in child process anymore
-            with matrix_lock:
-                shared_matrix[:,start_node][shared_matrix[:,start_node] > 0] = max_chain_shared.value
-                aux = shared_matrix[:,start_node]
-                logging.info("MAX UPDATE LOOP: concluded node " + str(start_node) +", max " + str(max_chain_shared.value))
-                np.save(r'previous_run\array.npy', shared_matrix)
+                        
+            # Update the the max of the node in the shared matrix and save the matrix
+            if max_chain_shared.value > 0:
+                with matrix_lock:
+                    try:
+                        if shared_matrix[:,start_node].max() < max_chain_shared.value:
+                            logging.error("start relations matrix setup logic is incorrect")
+                            exit(1)
+                        print("before " + str(shared_matrix[:,start_node].max() ))
+                        shared_matrix[shared_matrix[:, start_node] > 0, start_node] = max_chain_shared.value
+                        print("after " + str(shared_matrix[:,start_node].max() ))
+                        aux = shared_matrix[:,start_node]
+                        logging.info("MAX UPDATE LOOP: concluded node " + str(start_node) +", max " + str(max_chain_shared.value))
+                        with open(r'previous_run\array.npy', 'wb') as file:    
+                            np.save(r'previous_run\array.npy', shared_matrix)
 
-                with open(r'previous_run\max_update_node.bin', 'wb') as file:
-                    file.write(start_node.to_bytes(32, byteorder='big')) 
+                        with open(r'previous_run\max_update_node.bin', 'wb') as file:
+                            file.write(start_node.to_bytes(32, byteorder='big'))
+                    except Exception as e:
+                        #NOTE
+                        logging.error(f"Error saving the matrix: {e}")
 
 
-            # Break for loop if main process is done
+
+            if start_node >= 1040:
+                t2 = time.time()
+                print(t2-t1)
+                break
+
+
+
+            #Break for loop if main process is done
             if not process.is_alive():
                 print("main_loop_sto")  
                 break

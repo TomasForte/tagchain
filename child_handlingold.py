@@ -87,7 +87,7 @@ def starting_child(nodes, nodes_size, matrix, matrix_out, dic_id, dic_tag_id, ch
                     counter +=1
                     
 
-                    if counter % 100 == 0:
+                    if counter % 1 == 0:
                         print("node id - "+str(node_id)+" - id " +str(chains[1][0][1][0])+ " - tag " + str(chains[1][0][2][0]) +
                           " apply counter - " + str(counter)+" with task counter = " + str(task_counter.value) + " qlist len "+ str(len(qlist)))
                    

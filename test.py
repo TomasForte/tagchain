@@ -1,8 +1,17 @@
 import time
 import numpy as np
 
-with open(r'previous_run\max_update_node.bin', 'rb') as file:
-    start_max_update_node = int.from_bytes(file.read(32), byteorder='big')
-with open(r'previous_run\main_loop_node.bin', 'rb') as file:
-    start_main_loop_node = int.from_bytes(file.read(32), byteorder='big')
-teste = 23
+import numpy as np
+
+# Example matrices (same size)
+A = np.array([[1, 2, 3, 4], [5, 6, 7, 8]])
+B = np.array([[9, 10, 11, 12], [13, 14, 15, 16]])
+
+# Define the split point (X)
+X = 2  # Column index where the split happens
+
+# Create the new matrix
+new_matrix = np.hstack((A[:, :X], B[:, X:]))
+
+print("New Matrix:")
+print(new_matrix)
