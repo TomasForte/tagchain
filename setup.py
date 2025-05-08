@@ -9,6 +9,14 @@ import pstats
 import tracemalloc
 #import psutil
 import pandas as pd
+import starting_max
+
+def build_column_name(n):
+    column_names = []
+    for i in range(1, n+1):
+        column_names.extend([f"node_id{i}", f"id{i}", f"title{i}", f"finish{i}", f"tag_id{i}", f"tag{i}"])
+    column_names.append("max_chain")
+    return column_names
 
 def prepare_data(df_tv, df_tags): 
     """Merge and clean data, add node IDs"""
@@ -44,16 +52,15 @@ def build_relations_dataframe(df, df_nodes):
     df = df.drop(columns=["id", "title", "finish"])
     df.columns = ["node_id1", "id1", "title1", "finish1", "tag_id1", "tag1",
                   "id2", "title2", "finish2", "node_id2", "tag_id2", "tag2"]
-    df = df[["id1", "title1", "finish1", "tag_id1", "tag1",
-             "id2", "title2", "finish2", "tag_id2", "tag2",
-             "node_id1", "node_id2"]] 
+    df = df[["node_id1", "id1", "title1", "finish1", "tag_id1", "tag1",
+             "node_id2", "id2", "title2", "finish2", "tag_id2", "tag2"]] 
     df = df[df['tag1'] != df['tag2']] # tag2 can be the same as tag1
     df = df.sort_values(by=["finish2", "finish1", "id1"], ascending=False)
 
     return df
 
 
-def setup_shared_variables(df, df_nodes):
+def get_nodes(df_nodes):
     """Initialize relations matrix"""
    
     #NOTE the index of the array and matrix are the node_id
@@ -61,61 +68,25 @@ def setup_shared_variables(df, df_nodes):
     nodes = df_nodes[["id", "tag_id"]].to_numpy(dtype = "int64")
     nodes_size = nodes.shape[0] 
 
-    # Create relations matrix
-    matrix = np.zeros((nodes_size, nodes_size), dtype=int)
-    matrix[df["node_id1"].values, df["node_id2"].values] = 1
-
-
-    #setting the maxium possible maxium of each node
-    #NOTE The logic here is to loop through all nodes grouped by  finish date and check the max chain of each group of nodes
-    #they are connected to that have a finish date before the finish date of the starting node.
-    #The max chain of that node is that maximum + 1 + the number of possible nodes that have the same finish date
-    df["max_chain"] = 2
-    #TODO Think of better will to do this. I don't like looping df
-    for date in sorted(df["finish1"].unique(), reverse=True):
-        #group of nodes relations that have the same finish date
-        helper = df[df["finish1"] == date].copy()
-        # number of unique nodes
-        entries_same_date = helper[helper["finish1"] == helper["finish2"]]["id2"].nunique()
-        # remove relations that link nodes with the same finish date
-        helper = helper[helper["finish1"] != helper["finish2"]]
-        uniquenode = helper["node_id2"].unique()        
-        # merge section the relations df        
-        helper = df[df["node_id1"].isin(uniquenode)]
-
-
-        # get max fot section
-        max_chain = helper["max_chain"].max()
-        if pd.isna(max_chain) or max_chain < 2:
-            print("foda-se")
-        # if no max the max is the default else the max_chain + 1
-        max_chain = 2 if pd.isna(max_chain) else max_chain + 1
-        # add the number of nodes with the same date as in the best case scenario they can link with ona another
-        # and then follow the path of the max_chain
-        max_chain_start =  max_chain + entries_same_date
-
-        if max_chain_start >= 2:
-            df.loc[df["finish1"] == date, 'max_chain'] = max_chain_start
-
-
-
-    #update the relations matrix the max_chain of the nodes
-    max_chain_values = df.groupby("node_id1")["max_chain"].max()
-    for  node_id, max_value in max_chain_values.items():
-        print("node_id: " + str(max_value))
-        matrix[matrix[:, node_id] > 0, node_id] = max_value
-
-    test = df[df["id1"]==48512]
-    test2 = df[df["tag_id2"]==140]
-
     #build matrix with the nodes out based on each node
     matrix_out = np.zeros((nodes_size, nodes_size), dtype=bool)
     for i  in range(0, nodes_size):
         nodes_out = (df_nodes["id"] == df_nodes.iloc[i]["id"]) | (df_nodes["tag_id"] == df_nodes.iloc[i]["tag_id"])
         matrix_out[i,:]= nodes_out
-    
 
-    return nodes, nodes_size, matrix, matrix_out
+    return nodes, nodes_size, matrix_out
+
+def get_matrix(df, nodes_size):
+
+    # Create relations matrix
+    matrix = np.zeros((nodes_size, nodes_size), dtype=int)
+    matrix[df["node_id1"].values, df["node_id2"].values] = 1
+
+    matrix = starting_max.update_max(df, matrix)
+
+
+
+    return matrix
 
 #TODO instead of using df_notes i could use df_relations to get with nodes that
 #are connected to another node. I could also start the chains where alreay two elements

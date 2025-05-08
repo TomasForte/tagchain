@@ -35,7 +35,8 @@ def main_loop(chains_by_node, matrix_out, wanted_chain, matrix, matrix_size, nod
                 #get the nodes where is possible to have a chain greater than the chain value
                 connect_nodes = matrix[node_id,:] > (wanted_chain-chain_size)
                 #get the nodes from the connect_nodes that are excluded from the chain
-                next_nodes = np.where(connect_nodes & ~nodes_out)[0]
+                mask = (connect_nodes) & (~nodes_out)
+                next_nodes = mask.nonzero()[0]
                 n_next_nodes = next_nodes.size
 
                 #check if there're possible nextnodes

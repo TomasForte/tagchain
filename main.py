@@ -6,6 +6,7 @@ import logging
 import child_handling
 import os
 import numpy as np
+import starting_max
 
 def parse_arguments():
     """Parse command-line arguments."""
@@ -29,7 +30,7 @@ def parse_arguments():
                         type=int, default=40, 
                         help="Size of the chain.", metavar=" ")
     parser.add_argument("-p", "--processes", 
-                        type=int, default=4, 
+                        type=int, default=3, 
                         help="Number of processes for updating chains.", metavar=" ")
     parser.add_argument("-b", "--batchsize", 
                         type=int, default=10000, 
@@ -115,7 +116,7 @@ def load_from_db():
 
     return df, df_tags
 
-def resume_previous_run(folder_path, chains_by_node, nodes_size, matrix_original):
+def resume_previous_run(folder_path, chains_by_node, nodes_size, df):
     """Load data from the previous run."""
 
     # load relations matrix from previous run
@@ -147,10 +148,11 @@ def resume_previous_run(folder_path, chains_by_node, nodes_size, matrix_original
     if nodes_size != matrix.shape[0]:
         logging.error("Matrix from previous run is not the same size as the loaded data.")
         exit(1)
-    elif not np.array_equal(matrix > 0, matrix_original > 0):
-        logging.error("Matrix from previous doesn't match the loaded data.")
-        exit(1)
-    matrix = np.hstack((matrix[:,:start_max_update_node], matrix_original[:,start_max_update_node:]))
+
+
+    matrix = starting_max.update_max(df,matrix, start_max_update_node)
+    
+
     # np.savetxt("matrix.csv", matrix,  
     #   delimiter = ",")
     # np.savetxt("matrix_org.csv", matrix_original,  
@@ -215,7 +217,7 @@ def main():
     logging.info("Building relations...")
     df_relations = setup.build_relations_dataframe(df, df_nodes)
     logging.info("Setting up relations matrix...")
-    nodes, nodes_size, matrix, matrix_out = setup.setup_shared_variables(df_relations, df_nodes)
+    nodes, nodes_size, matrix_out = setup.get_nodes(df_nodes)
     chains_by_node = setup.build_chain_list(df_nodes, matrix_out)
 
 
@@ -223,8 +225,9 @@ def main():
     #Load data from the previous run if the continue_previous_run flag is set
     if args.continuepreviousrun:
         logging.info("Load data from previous run...")
-        matrix, chains_by_node_main_loop, chains_by_node_max_update = resume_previous_run(folder_path, chains_by_node, nodes_size, matrix)
+        matrix, chains_by_node_main_loop, chains_by_node_max_update = resume_previous_run(folder_path, chains_by_node, nodes_size, df_relations)
     else:
+        matrix = setup.get_matrix(df_relations, nodes_size)
         chains_by_node_main_loop = chains_by_node
         chains_by_node_max_update = chains_by_node
 

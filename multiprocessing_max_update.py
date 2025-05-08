@@ -96,13 +96,11 @@ def max_update(chain, current_max):
                 # impossible_nodes[nodes_out] = True
                 # next_nodes = np.where((connect_nodes == True) & (impossible_nodes == False))[0]
                 #option5------
-                connect_nodes = shared_matrix[chain_index,:]
-
-                next_nodes = np.where((connect_nodes > (local_max - size)) & (~nodes_out))[0]
+                threshold = local_max - size
+                mask = (shared_matrix[chain_index,:] > threshold) & (~nodes_out)
+                next_nodes = mask.nonzero()[0]
                 n_next_nodes = next_nodes.size
                 counter += 1
-                if len(chains)> 500:
-                    print("wtg")
 
                 #check if there're possible nextnodes
                 if n_next_nodes >= 1:
@@ -141,7 +139,7 @@ def max_update(chain, current_max):
                         id_chain + (nodes[node][0],),
                         tag_id_chain + (nodes[node][1],),
                         nodes_out | matrix_out[node,:],
-                        next_size) for node in reversed(next_nodes)]   
+                        next_size) for node in next_nodes]   
                     chains.extend(chains_to_add)
                     #-------------------
                     # reversed_nodes = next_nodes[::-1]
@@ -200,7 +198,7 @@ def max_update(chain, current_max):
                     if task_counter.value <  number_processes:
                         with chain_lock:
                             if not task_stack:
-                                chain = chains.pop(0)
+                                chain = chains.pop()
                                 task_stack.extend(chains)
                                 chains = [chain]
                                 counter = 0
@@ -213,6 +211,8 @@ def max_update(chain, current_max):
                     with max_chain.get_lock():
                         if local_max > max_chain.value:          
                             max_chain.value = local_max
+                        else:
+                            local_max = max_chain.value
         # sortby = SortKey.CUMULATIVE
         # ps = pstats.Stats(profiler).sort_stats(sortby)
         # ps.print_stats(10) 
