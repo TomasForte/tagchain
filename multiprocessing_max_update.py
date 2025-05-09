@@ -70,6 +70,7 @@ def max_update(chain, current_max):
         local_max = current_max
 
         while chains:
+            current_max = local_max
             while counter < batch_size and chains:
                 chain = chains.pop()
                 chain_index = chain[0]
@@ -201,12 +202,8 @@ def max_update(chain, current_max):
                                 chain = chains.pop()
                                 task_stack.extend(chains)
                                 chains = [chain]
-                                counter = 0
-                    else:
-                        counter = 0
-                #if there is only 1 chain there's no need to add it to the process
-                else:
-                    counter = 0
+
+                counter = 0
                 if local_max > current_max:
                     with max_chain.get_lock():
                         if local_max > max_chain.value:          

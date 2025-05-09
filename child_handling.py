@@ -23,7 +23,7 @@ def start_multiprocesses(chains_by_node_main_loop, chains_by_node_max_update, no
     process = multiprocessing.Process(
         target=multiprocessing_main_loop.main_loop, 
         args=(chains_by_node_main_loop, matrix_out, settings["wanted_chain"], 
-              matrix_shared_array, nodes_size, nodes))
+              matrix_shared_array, nodes_size, nodes, matrix_lock))
     try:
         process.start()
         logging.info("Main loop process started.")
