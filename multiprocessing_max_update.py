@@ -13,16 +13,13 @@ import pstats
 from pstats import SortKey
 
 
-#NOTE THE error_callback as well as the callback arg of apply_asynch are run in the main process
+#NOTE THE error_callback as well as the callback arg of apply_asynch are run in the main process not the child
 #so task_counter is not accessible in this function 
 #TODO find away to update task_count when function fail to keep number of task_corrected
 def error_callback (e):
-    try:
-        logging.error(f"Error occurred: {e}")
-        with task_counter.get_lock():  # Ensure thread-safe access
-            task_counter.value -= 1
-    except Exception as e:
-        print(f"Error in error_callback: {e}")
+
+    logging.error(f"Error in error_callback: {e}")
+    exit(1)
 
 
 
@@ -48,7 +45,7 @@ def init_arr(task_stack, boolean_matrix_mask, nodes, shared_matrix_array, matrix
 #https://stackoverflow.com/questions/64222805/how-to-pass-2d-array-as-multiprocessing-array-to-multiprocessing-pool
 
 
-def max_update(chain, current_max):
+def max_update(process_number):
      
     try:
         global task_stack
@@ -66,171 +63,100 @@ def max_update(chain, current_max):
         # profiler = cProfile.Profile()
         # profiler.enable()
         counter = 1
-        chains = [chain]
-        local_max = current_max
-
-        while chains:
-            current_max = local_max
-            while counter < batch_size and chains:
-                chain = chains.pop()
-                chain_index = chain[0]
-                id_chain =  chain[1]
-                tag_id_chain =  chain[2]
-                nodes_out =  chain[3]
-                size = chain[4]
-                #get the nodes where is possible to have a chain greater than the chain value
-                #remove the nodes if is in the nodesout list
-                #option1--------
-                # connect_nodes = np.where(boolean_matrix_mask[chain_index,:])[0]
-                # impossible_nodes_mask = np.isin(connect_nodes, nodes_out, assume_unique=True)
-                # next_nodes = connect_nodes[~impossible_nodes_mask]
-                #option2--------
-                # connect_nodes = np.where(boolean_matrix_mask[chain_index,:])[0]
-                # next_nodes = np.setdiff1d(connect_nodes, nodes_out, assume_unique=True)
-                #option3--------
-                # connect_nodes = np.where(boolean_matrix_mask[chain_index,:])[0]
-                # indices = np.searchsorted(nodes_out, connect_nodes)
-                # next_nodes = connect_nodes[((indices >= len(nodes_out)) | nodes_out[indices] != connect_nodes)]
-                #ption4---------
-                # connect_nodes = boolean_matrix_mask[chain_index,:]
-                # impossible_nodes = np.zeros(connect_nodes.size, dtype=bool)
-                # impossible_nodes[nodes_out] = True
-                # next_nodes = np.where((connect_nodes == True) & (impossible_nodes == False))[0]
-                #option5------
-                threshold = local_max - size
-                mask = (shared_matrix[chain_index,:] > threshold) & (~nodes_out)
-                next_nodes = mask.nonzero()[0]
-                n_next_nodes = next_nodes.size
-                counter += 1
-
-                #check if there're possible nextnodes
-                if n_next_nodes >= 1:
-                    next_size = size + 1
-                    if next_size > local_max:
-                        local_max = next_size
-
-                    #if there is more than one nextnode append to chains
-                    #NOTE verse loop because to make it most recent last (if i add older last the list i'll grow too much)
-                    # -------------
-                    # for i in range(n_next_nodes - 1, -1, -1):
-                    #     node = next_nodes[i]
-                    #     chains.append((
-                    #         node,
-                    #         id_chain + (indexs[node][0],),
-                    #         tag_id_chain + (indexs[node][1],),
-                    #         nodes_out | matrix_out[node,:],
-                    #         next_size))
-                    # for node in reversed(next_nodes):
-                    #     chains.append((
-                    #         node,
-                    #         id_chain + (indexs[node][0],),
-                    #         tag_id_chain + (indexs[node][1],),
-                    #         nodes_out | matrix_out[node,:],
-                    #         next_size))
-                    # chains_to_add =[(
-                    #     next_nodes[i],
-                    #     id_chain + (indexs[next_nodes[i]][0],),
-                    #     tag_id_chain + (indexs[next_nodes[i]][1],),
-                    #     nodes_out | matrix_out[next_nodes[i],:],
-                    #     next_size) for i in range(n_next_nodes - 1, -1, -1)]    
-                    # chains.extend(chains_to_add)
-
-                    chains_to_add =[(
-                        node,
-                        id_chain + (nodes[node][0],),
-                        tag_id_chain + (nodes[node][1],),
-                        nodes_out | matrix_out[node,:],
-                        next_size) for node in next_nodes]   
-                    chains.extend(chains_to_add)
-                    #-------------------
-                    # reversed_nodes = next_nodes[::-1]
-                    # next_ids = indexs[reversed_nodes][:, 0]
-                    # a_arr = np.asarray(id_chain)
-                    # next_id_chain = np.column_stack([np.tile(a_arr, (len(next_ids), 1)), next_ids])
-
-                    # next_tag_ids = indexs[reversed_nodes][:, 1]
-                    # b_arr = np.asarray(tag_id_chain)
-                    # next_tag_id_chain = np.column_stack([np.tile(b_arr, (len(next_tag_ids), 1)), next_tag_ids])
-
-                    # next_nodes_out = np.logical_or(nodes_out, matrix_out[reversed_nodes,:])
-
-                    # next_chain_size = [next_size] * n_next_nodes
-                    # next_chains = list(zip(reversed_nodes, next_id_chain, next_tag_id_chain, next_nodes_out, next_chain_size))
-                    # chains.extend(next_chains)
-
-                    #------------------
-                    # pass
-                    #-------------------
-                    # reversed_nodes = next_nodes[::-1]
-                    # next_ids = indexs[reversed_nodes][:, 0]
-                    # next_tag_ids = indexs[reversed_nodes][:, 1]
+        local_max = 1
+        chains = []
+        while True:
+            if (task_stack):
+                #check again if empty because some other process my pop the last item between the first check and i don't want to add
+                # a lock in a while True
+                try:
                     
+                    chains = [task_stack.pop()]
+                    print("process " + str(process_number) + " started")
+                    task_counter.value += 1
+                except:
+                    logging.debug("stack is became empty")
                     
-                    # new_chains = [
-                    #     (
-                    #         node, 
-                    #         id_chain + (nid,),    
-                    #         tag_id_chain + (ntag,),    
-                    #         nodes_out | matrix_out[node,:],
-                    #         next_size
-                    #     )
-                    #     for node, nid, ntag in zip(reversed_nodes, next_ids, next_tag_ids)
-                    #     ]
-                    # chains.extend(new_chains)
-                    #-----------------
-                    # reversed_nodes = next_nodes[::-1]
-                    # precomputed_data = [(indexs[node][0], indexs[node][1], nodes_out | matrix_out[node, :]) for node in reversed_nodes]
-
-                    # new_chains = [
-                    #     (
-                    #         node,
-                    #         id_chain + (nid,),
-                    #         tag_id_chain + (ntag,),
-                    #         data,
-                    #         next_size
-                    #     )
-                    #     for node, (nid, ntag, data) in zip(reversed_nodes, precomputed_data)
-                    # ]
-
-                    # chains.extend(new_chains)
-
-            if chains:
-                if len(chains) >= 1:
-                    if task_counter.value <  number_processes:
-                        with chain_lock:
-                            if not task_stack:
-                                chain = chains.pop()
-                                task_stack.extend(chains)
-                                chains = [chain]
-
-                counter = 0
-                if local_max > current_max:
-                    with max_chain.get_lock():
-                        if local_max > max_chain.value:          
-                            max_chain.value = local_max
-                        else:
+                # don't lock if pop failed
+                if chains:
+                    if max_chain.value > local_max :      
                             local_max = max_chain.value
-        # sortby = SortKey.CUMULATIVE
-        # ps = pstats.Stats(profiler).sort_stats(sortby)
-        # ps.print_stats(10) 
+
+                while chains:
+                    while counter < batch_size and chains:
+                        chain = chains.pop()
+                        chain_index = chain[0]
+                        id_chain =  chain[1]
+                        tag_id_chain =  chain[2]
+                        nodes_out =  chain[3]
+                        size = chain[4]
+                        #get the nodes where is possible to have a chain greater than the chain value
+
+                        threshold = local_max - size
+                        mask = (shared_matrix[chain_index,:] > threshold) & (~nodes_out)
+                        next_nodes = mask.nonzero()[0]
+                        n_next_nodes = next_nodes.size
+                        counter += 1
+
+                        #check if there're possible nextnodes
+                        if n_next_nodes >= 1:
+                            next_size = size + 1
+                            if next_size > local_max:
+                                local_max = next_size
+
+
+                            chains_to_add =[(
+                                node,
+                                id_chain + (nodes[node][0],),
+                                tag_id_chain + (nodes[node][1],),
+                                nodes_out | matrix_out[node,:],
+                                next_size) for node in next_nodes]   
+                            chains.extend(chains_to_add)
+
+                    if local_max > max_chain.value:
+                        with max_chain.get_lock():
+                            if local_max > max_chain.value:          
+                                max_chain.value = local_max
+                    else:
+                        local_max = max_chain.value
+
+                    if chains:
+                        if len(chains) >= 1:
+                            if task_counter.value <  number_processes:
+                                if not task_stack:
+                                    chain = chains.pop()
+                                    task_stack.extend(chains)
+                                    chains = [chain]
+                                    print("process " + str(process_number) + " filled stack")
+
+                        counter = 0
+
+                    else:
+
+                        if task_stack:
+                            try:
+                                chains = [task_stack.pop()]
+                                print("resetting process " + str(process_number))
+                            except:
+                                pass
+                        if not chains:
+                            with task_counter.get_lock():
+                                task_counter.value -= 1
+                            print("process " + str(process_number) + " stopped")
+
+                
+            if task_counter.value == 0:
+                break
+
+            # sortby = SortKey.CUMULATIVE
+            # ps = pstats.Stats(profiler).sort_stats(sortby)
+            # ps.print_stats(10) 
 
 
     except Exception as e:
         logging.error(f"Error in max_update: {e}")
 
-    try:
-        if local_max > current_max:
-            with max_chain.get_lock():
-                if local_max > max_chain.value:          
-                    max_chain.value = local_max
-    except Exception as e:
-        logging.error(f"Error in updating max_chain: {e}")
 
-    try:    
-        with task_counter.get_lock():
-            task_counter.value -= 1
-    except Exception as e:
-        logging.error(f"Error in updating task_counter: {e}")
 
     return None
 

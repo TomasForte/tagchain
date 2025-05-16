@@ -30,7 +30,7 @@ def parse_arguments():
                         type=int, default=40, 
                         help="Size of the chain.", metavar=" ")
     parser.add_argument("-p", "--processes", 
-                        type=int, default=3, 
+                        type=int, default=6, 
                         help="Number of processes for updating chains.", metavar=" ")
     parser.add_argument("-b", "--batchsize", 
                         type=int, default=10000, 
@@ -39,7 +39,7 @@ def parse_arguments():
                         type=int, default=10000, 
                         help="Max tasks per child process before restarting.")
     parser.add_argument("-c", "--continuepreviousrun", 
-                        action="store_true", 
+                        action="store_false", 
                         help="continue where the last run left off")
     args = parser.parse_args()
 

@@ -102,9 +102,11 @@ def main_loop(chains_by_node, matrix_out, wanted_chain, matrix, matrix_size, nod
                         #the old > 0 bit is because if there no other node that conects to it max was not calculated
                         # tecnically I don't even need to update the max of this node the no other node that connects to it
                         if (old_max < max_chain_by_id) & (old_max > 0):
-                            logging.error("start relations matrix setup logic is incorrect")
-                            exit(1)
-                        matrix[matrix[:, node[0]] > 0, node[0]] = max_chain_by_id
+                            # logging.error("start relations matrix setup logic is incorrect")
+                            # exit(1)
+                            pass
+                        else:
+                            matrix[matrix[:, node[0]] > 0, node[0]] = max_chain_by_id
                         
 
                         logging.info("MAIN LOOP: concluded node " + str(node[0]) +", max " + str(max_chain_by_id))

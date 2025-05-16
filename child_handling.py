@@ -56,43 +56,12 @@ def start_multiprocesses(chains_by_node_main_loop, chains_by_node_max_update, no
             task_counter.value = 0
             counter = 0
             node_id = chains[0]
-            logging.info("MAX UPDATE LOOP: starting node - "+ str(chains[1][0][0]) +", id - " +str(chains[1][0][1][0]))
+            logging.info("MAX UPDATE LOOP: starting node - "+ str(chains[1][0][0]) +", id - " +str(chains[1][0][1][0])) 
 
-            try:
-                #TODO
-                while True:
-                    # Check if there are tasks in the stack and available processes
-                    if (task_stack) and (task_counter.value < settings["number_processes"]):
-                        #I had put this outside the child because when the counter was added inside the process
-                        #the main process would have requests a bunch of new taks because "task_counter.value < number_processes"
-                        with chain_lock:
-                            chain = task_stack.pop()
-                        with task_counter.get_lock():
-                            task_counter.value += 1
-                        
-                        if max_chain_shared.value > max_local:
-                            max_local = max_chain_shared.value 
-                        counter +=1
-                        
+            results = [pool.apply_async(multiprocessing_max_update.max_update, args=(i,)) for i in range(settings["number_processes"])]
 
-                        if counter % 100 == 0:
-                            logging.info("MAX UPDATE LOOP: status node id - "+str(node_id)+", id - " +str(chains[1][0][1][0])+
-                            ", counter - " + str(counter)+", task counter - " + str(task_counter.value) + ", tasks - "+ str(len(task_stack)))
-                    
-
-                        pool.apply_async(multiprocessing_max_update.max_update, args=(chain, max_local), 
-                                        error_callback = multiprocessing_max_update.error_callback)
-                        
-                    elif (not task_stack) and (task_counter.value ==  0):
-                        # If there are no tasks in the queue and all processes are done, break the loop
-                        break
-            except Exception as e:
-                logging.error(f"Program stop: {e}")
-                pool.terminate()
-                pool.join()
-                break
-
-            
+            for result in results:
+                result.get()
                         
             # Update the the max of the node in the shared matrix and save the matrix
             if max_chain_shared.value > 1:
