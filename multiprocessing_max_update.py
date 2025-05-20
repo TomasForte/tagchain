@@ -37,6 +37,7 @@ def init_arr(task_stack, boolean_matrix_mask, nodes, shared_matrix_array, matrix
     globals()["number_processes"] = number_processes
     shared_matrix = np.frombuffer(shared_matrix_array, dtype='int32').reshape(matrix_out.shape)
     globals()["shared_matrix"] = shared_matrix
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s  - %(message)s')
     # profiler = cProfile.Profile()
     # profiler.enable()
     # globals()["profiler"] = profiler 
@@ -66,21 +67,27 @@ def max_update(process_number):
         local_max = 1
         chains = []
         while True:
+
             if (task_stack):
                 #check again if empty because some other process my pop the last item between the first check and i don't want to add
                 # a lock in a while True
                 try:
-                    
+                    with task_counter.get_lock():
+                        task_counter.value += 1
                     chains = [task_stack.pop()]
-                    print("process " + str(process_number) + " started")
-                    task_counter.value += 1
+                    logging.info("process " + str(process_number) + " started")
                 except:
-                    logging.debug("stack is became empty")
+                    with task_counter.get_lock():
+                        task_counter.value -= 1
+                    logging.debug("stack became empty")
+
                     
                 # don't lock if pop failed
                 if chains:
                     if max_chain.value > local_max :      
                             local_max = max_chain.value
+
+
 
                 while chains:
                     while counter < batch_size and chains:
@@ -112,12 +119,14 @@ def max_update(process_number):
                                 nodes_out | matrix_out[node,:],
                                 next_size) for node in next_nodes]   
                             chains.extend(chains_to_add)
-
+                            
+                    counter = 0
                     if local_max > max_chain.value:
                         with max_chain.get_lock():
                             if local_max > max_chain.value:          
                                 max_chain.value = local_max
-                    else:
+                        logging.info("process " + str(process_number) + " update max " + str(local_max))
+                    elif local_max < max_chain.value:
                         local_max = max_chain.value
 
                     if chains:
@@ -126,27 +135,33 @@ def max_update(process_number):
                                 if not task_stack:
                                     chain = chains.pop()
                                     task_stack.extend(chains)
-                                    chains = [chain]
-                                    print("process " + str(process_number) + " filled stack")
-
-                        counter = 0
+                                    logging.info("process " + str(process_number) + " filled stack with " + str(len(chains)))
+                                    chains = [chain]            
 
                     else:
 
                         if task_stack:
                             try:
                                 chains = [task_stack.pop()]
-                                print("resetting process " + str(process_number))
+                                logging.info("process " + str(process_number) + " local stack filler tasks - " + str(len(task_stack)))  
                             except:
-                                pass
-                        if not chains:
+                                with task_counter.get_lock():
+                                    task_counter.value -= 1
+                        else:
                             with task_counter.get_lock():
                                 task_counter.value -= 1
-                            print("process " + str(process_number) + " stopped")
+                logging.info("process " + str(process_number) + " stopped current max " + str(max_chain.value))
 
                 
             if task_counter.value == 0:
                 break
+
+            time.sleep(0.1)
+            print("bob")
+
+        
+
+            
 
             # sortby = SortKey.CUMULATIVE
             # ps = pstats.Stats(profiler).sort_stats(sortby)
@@ -157,7 +172,7 @@ def max_update(process_number):
         logging.error(f"Error in max_update: {e}")
 
 
-
+    logging.info("process " + str(process_number) + " exiting")
     return None
 
 

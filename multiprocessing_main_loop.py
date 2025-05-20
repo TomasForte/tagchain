@@ -34,15 +34,15 @@ def main_loop(chains_by_node, matrix_out, wanted_chain, matrix, matrix_size, nod
                 nodes_out =  chain[3]
                 chain_size = chain[4]
                 #get the nodes where is possible to have a chain greater than the chain value
-                connect_nodes = matrix[node_id,:] >= (real_max  - chain_size) 
+                connect_nodes = matrix[node_id,:] >= (wanted_chain  - chain_size) 
                 nodes_not_out = ~nodes_out
-                excluded_nodes = ~connect_nodes
-                mask2 = (excluded_nodes) & (nodes_not_out)
-                next_nodes_excluded = mask2.nonzero()[0]
-                if next_nodes_excluded.size > 0:
-                    highest_excluded_value = matrix[node_id, next_nodes_excluded ].max() + chain_size
-                    if highest_excluded_value > max_chain_by_id:
-                        max_chain_by_id = highest_excluded_value
+                # excluded_nodes = ~connect_nodes
+                # mask2 = (excluded_nodes) & (nodes_not_out)
+                # next_nodes_excluded = mask2.nonzero()[0]
+                # if next_nodes_excluded.size > 0:
+                #     highest_excluded_value = matrix[node_id, next_nodes_excluded ].max() + chain_size
+                #     if highest_excluded_value > max_chain_by_id:
+                #         max_chain_by_id = highest_excluded_value
                 #get the nodes from the connect_nodes that are excluded from the chain
                 mask = (connect_nodes) & (nodes_not_out)
                 next_nodes = mask.nonzero()[0]
@@ -50,10 +50,9 @@ def main_loop(chains_by_node, matrix_out, wanted_chain, matrix, matrix_size, nod
 
                 #check if there're possible nextnodes
                 if n_next_nodes >= 1:
-                    next_size = chain_size + 1
                     next_chain_size = chain_size + 1
-                    if real_max < next_chain_size and real_max < wanted_chain:
-                        real_max = next_chain_size
+                    # if real_max < next_chain_size and real_max < wanted_chain:
+                    #     real_max = next_chain_size
                     if max_chain_by_id < next_chain_size:
                         max_chain_by_id = next_chain_size
 
@@ -74,7 +73,7 @@ def main_loop(chains_by_node, matrix_out, wanted_chain, matrix, matrix_size, nod
                             id_chain + (nodes[node][0],),
                             tag_id_chain + (nodes[node][1],),
                             nodes_out | matrix_out[node,:],
-                            next_size) for node in reversed(next_nodes)]
+                            next_chain_size) for node in reversed(next_nodes)]
                         )
 
 
@@ -96,17 +95,17 @@ def main_loop(chains_by_node, matrix_out, wanted_chain, matrix, matrix_size, nod
                 with matrix_lock:
                     try:
                         print("main_loop update")
-                        print("before " + str(matrix[:,node[0]].max() ))
-                        print("after " + str(max_chain_by_id))
-                        old_max = matrix[:,node[0]].max()
-                        #the old > 0 bit is because if there no other node that conects to it max was not calculated
-                        # tecnically I don't even need to update the max of this node the no other node that connects to it
-                        if (old_max < max_chain_by_id) & (old_max > 0):
-                            # logging.error("start relations matrix setup logic is incorrect")
-                            # exit(1)
-                            pass
-                        else:
-                            matrix[matrix[:, node[0]] > 0, node[0]] = max_chain_by_id
+                        # print("before " + str(matrix[:,node[0]].max() ))
+                        # print("after " + str(max_chain_by_id))
+                        # old_max = matrix[:,node[0]].max()
+                        # #the old > 0 bit is because if there no other node that conects to it max was not calculated
+                        # # tecnically I don't even need to update the max of this node the no other node that connects to it
+                        # if (old_max < max_chain_by_id) & (old_max > 0):
+                        #     # logging.error("start relations matrix setup logic is incorrect")
+                        #     # exit(1)
+                        #     pass
+                        # else:
+                        #     matrix[matrix[:, node[0]] > 0, node[0]] = max_chain_by_id
                         
 
                         logging.info("MAIN LOOP: concluded node " + str(node[0]) +", max " + str(max_chain_by_id))
