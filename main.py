@@ -41,6 +41,9 @@ def parse_arguments():
     parser.add_argument("-c", "--continuepreviousrun", 
                         action="store_false", 
                         help="continue where the last run left off")
+    parser.add_argument("-r", "--reverse_main_loop", 
+                        action="store_false", 
+                        help="reverse the order of the main loop oldest to newest")
     args = parser.parse_args()
 
     if args.wantedchainsize <= 2:
@@ -119,10 +122,16 @@ def load_from_db():
 def resume_previous_run(folder_path, chains_by_node, nodes_size, df):
     """Load data from the previous run."""
 
+    matrix_file = r'previous_run\array.npy'
+    start_main_loop_node_file = r'previous_run\main_loop_node_newest.bin'
+    end_main_loop_node_file = r'previous_run\main_loop_node_oldest.bin'
+    start_max_update_node_file = r'previous_run\max_update_node.bin'
+    end_main_loop_node = None
+    start_main_loop_node = None
     # load relations matrix from previous run
     try:
             #NOTE: Overwirting the matrix with the one from the previous run
-            matrix = np.load(r'previous_run\array.npy')
+            matrix = np.load(matrix_file )
                         # if the matrix from the previous run is not the same size as the loaded data, exi
     except FileNotFoundError:
         logging.error("Relations matrix not found.")
@@ -130,19 +139,29 @@ def resume_previous_run(folder_path, chains_by_node, nodes_size, df):
 
     # Load the last node of the max_update loop
     try:
-        with open(r'previous_run\max_update_node.bin', 'rb') as file:
+        with open(start_max_update_node_file, 'rb') as file:
                 start_max_update_node = int.from_bytes(file.read(32), byteorder='big')
     except FileNotFoundError:
         logging.error("max_update node not found")
         exit(1)
 
     # Load the last node of the main_loop loop
-    try:
-            with open(r'previous_run\main_loop_node.bin', 'rb') as file:
+    if os.path.exists( start_main_loop_node_file):
+        try:
+            with open( start_main_loop_node_file, 'rb') as file:
                 start_main_loop_node = int.from_bytes(file.read(32), byteorder='big')
-    except FileNotFoundError:
-        logging.error("main_loop node not found")
-        exit(1)
+        except FileNotFoundError:
+            logging.error("can't load the starting node of main_loop")
+            exit(1)
+
+    # Load the last node of the main_loop loop
+    if os.path.exists( end_main_loop_node_file):
+        try:
+            with open(end_main_loop_node_file, 'rb') as file:
+                end_main_loop_node = int.from_bytes(file.read(32), byteorder='big')
+        except FileNotFoundError:
+            logging.error("can't load the end node of main_loop")
+            exit(1)
 
 
     if nodes_size != matrix.shape[0]:
@@ -158,22 +177,32 @@ def resume_previous_run(folder_path, chains_by_node, nodes_size, df):
     # np.savetxt("matrix_org.csv", matrix_original,  
     #   delimiter = ",")
 
-
+    chains_by_node_main_loop = chains_by_node
     # Update the list of chains to be ran by each child process based on the starting node of the previous run
-    if start_main_loop_node > 0:
+    if start_main_loop_node is not None:
 
         #NOTE to self: next() return the first element of an iterator
         #itetor is build using a generator expression (basically a list comprehension with paranthesis instead of brackets)
         #if the iterator is empty it will raise a StopIteration exception
-        index_main_loop = next((i for i, chain in enumerate(chains_by_node) if chain[0] == start_main_loop_node), None)
+        index_main_loop = next((i for i, chain in enumerate(chains_by_node_main_loop) if chain[0] == start_main_loop_node), None)
         if index_main_loop is not None:
-            chains_by_node_main_loop = chains_by_node[index_main_loop + 1:]
+            chains_by_node_main_loop = chains_by_node_main_loop[index_main_loop + 1:]
             logging.info("Starting main_loop from node " + str(chains_by_node_main_loop[0][0]) + ", id - " + str(chains_by_node_main_loop[0][1][0][1][0]))
         else:
             logging.error("Starting node of main_loop not found in chains_by_node.")
             exit(1)
-    else:
-        chains_by_node_main_loop = chains_by_node
+    
+    if end_main_loop_node is not None:
+
+        index_main_loop = next((i for i, chain in enumerate(chains_by_node_main_loop) if chain[0] == end_main_loop_node), None)
+        if index_main_loop is not None:
+            chains_by_node_main_loop = chains_by_node_main_loop[:index_main_loop]
+            logging.info("ending main_loop in node " + str(chains_by_node_main_loop[0][0]) + ", id - " + str(chains_by_node_main_loop[0][1][0][1][0]))
+        else:
+            logging.error("endig node of main_loop not found in chains_by_node.")
+            exit(1)
+
+
 
     if start_max_update_node > 0:
         index_max_update = next((i for i, chain in enumerate(chains_by_node) if chain[0] == start_max_update_node), None)
@@ -235,7 +264,8 @@ def main():
     setting = {"wanted_chain": args.wantedchainsize,
             "number_processes": args.processes,
             "batch_size": args.batchsize,
-            "max_task_per_process": args.maxtaskperprocess}
+            "max_task_per_process": args.maxtaskperprocess,
+            "reverse_main_loop": args.reverse_main_loop}
 
 
 

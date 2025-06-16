@@ -9,7 +9,7 @@ import  pstats
 
 #TODO maybe add add an arguement to make to allow the max_chain to get chains above the wanted_chain limit
 #@jit(nopython=True)
-def main_loop(chains_by_node, matrix_out, wanted_chain, matrix, matrix_size, nodes, matrix_lock):
+def main_loop(chains_by_node, matrix_out, wanted_chain, matrix, matrix_size, nodes, matrix_lock, reverse):
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s  - %(message)s')
     matrix = np.frombuffer(matrix, dtype='int32').reshape(matrix_size, matrix_size)
     # profiler = cProfile.Profile()
@@ -19,6 +19,8 @@ def main_loop(chains_by_node, matrix_out, wanted_chain, matrix, matrix_size, nod
     real_max = 35
     iteration_counter = 0
     try:
+        if reverse:
+            chains_by_node.reverse()
         for node in chains_by_node:
             logging.info("MAIN LOOP: starting node - " + str(node[0]) + ", id - " + str(node[1][0][1][0]))
             max_chain_by_id = 1
@@ -109,8 +111,8 @@ def main_loop(chains_by_node, matrix_out, wanted_chain, matrix, matrix_size, nod
                         
 
                         logging.info("MAIN LOOP: concluded node " + str(node[0]) +", max " + str(max_chain_by_id))
-                        with open(r'previous_run\array.npy', 'wb') as file:    
-                            np.save(r'previous_run\array.npy', matrix)
+                        # with open(r'previous_run\array.npy', 'wb') as file:    
+                        #     np.save(r'previous_run\array.npy', matrix)
 
                     except Exception as e:
                         #NOTE
@@ -132,8 +134,14 @@ def main_loop(chains_by_node, matrix_out, wanted_chain, matrix, matrix_size, nod
             
             # store the node id of the corrent run
             try:
-                with open(r'previous_run\main_loop_node.bin', 'wb') as file:
-                    file.write(node[0].to_bytes(32, byteorder='big'))
+                if reverse:
+                    
+                    with open(r'previous_run\main_loop_node_oldest.bin', 'wb') as file:
+                        file.write(node[0].to_bytes(32, byteorder='big'))
+                else:
+
+                    with open(r'previous_run\main_loop_node_newest.bin', 'wb') as file:
+                        file.write(node[0].to_bytes(32, byteorder='big'))
             except Exception as e:
                 logging.error("Error saving the corrent node of MAIN LOOP" + str(e))
     
