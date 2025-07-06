@@ -21,7 +21,8 @@ def error_callback (e):
     logging.error(f"Error in error_callback: {e}")
     exit(1)
 
-
+def update_max():
+    pass
 
 
 def init_arr(task_stack, boolean_matrix_mask, nodes, shared_matrix_array, matrix_out, task_counter, max_chain, chain_lock, batch_size, number_processes):
@@ -82,14 +83,10 @@ def max_update(process_number):
                     logging.debug("stack became empty")
 
                     
-                # don't lock if pop failed
-                if chains:
-                    if max_chain.value > local_max :      
-                            local_max = max_chain.value
-
-
 
                 while chains:
+                    if max_chain.value > local_max :      
+                        local_max = max_chain.value
                     while counter < batch_size and chains:
                         chain = chains.pop()
                         chain_index = chain[0]
@@ -110,6 +107,15 @@ def max_update(process_number):
                             next_size = size + 1
                             if next_size > local_max:
                                 local_max = next_size
+                                #TODO make an update max function since it's used twice
+                                if local_max > max_chain.value:
+                                    with max_chain.get_lock():
+                                        #the check is made a second time because in between the 1st and the lock some process may have updated the max
+                                        if local_max > max_chain.value:          
+                                            max_chain.value = local_max
+                                    logging.info("process " + str(process_number) + " update max " + str(local_max))
+                                elif local_max < max_chain.value:
+                                    local_max = max_chain.value
 
 
                             chains_to_add =[(
