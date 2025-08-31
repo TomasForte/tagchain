@@ -13,7 +13,8 @@ import pandas as pd
 
    
        
-def start_multiprocesses(chains_by_node_main_loop, chains_by_node_max_update, nodes_size, nodes, matrix_out, settings, shared_vars):   
+def start_multiprocesses(chains_by_node_main_loop, chains_by_node_max_update, nodes_size,
+                          nodes, matrix_out, settings, shared_vars, previous_run_node = 0, previous_run_connectingnode = 0):   
     """start the main loop to build and pool to update the max chain of nodes in shared_matrix"""
     
     (boolean_matrix_mask, matrix_shared_array, task_stack,
@@ -48,51 +49,89 @@ def start_multiprocesses(chains_by_node_main_loop, chains_by_node_max_update, no
                 maxtasksperchild = settings["max_task_per_process"]) as pool:
         i=0
 
-        for chains in chains_by_node_max_update:
-            max_chain_shared.value = 1
-            task_stack.extend(chains[1])
-            max_local = 1
-            start_node = chains[0]
-            task_counter.value = 0
-            counter = 0
-            node_id = chains[0]
-            logging.info("MAX UPDATE LOOP: starting node - "+ str(chains[1][0][0]) +", id - " +str(chains[1][0][1][0])) 
-
-            results = [pool.apply_async(multiprocessing_max_update.max_update, args=(i,)) for i in range(settings["number_processes"])]
-
-            for result in results:
-                result.get()
-                        
-            # Update the the max of the node in the shared matrix and save the matrix
-            if max_chain_shared.value > 1:
-                with matrix_lock:
-                    try:
-                        print("before " + str(shared_matrix[:,start_node].max() ))
-                        print("after " + str(max_chain_shared.value))
-                        old_max = shared_matrix[:,start_node].max()
-                        #the old > 0 bit is because if there no other node that conects to it max was not calculated
-                        # tecnically I don't even need to update the max of this node the no other node that connects to it
-                        if (old_max < max_chain_shared.value) & (old_max > 0):
-                            logging.error("start relations matrix setup logic is incorrect")
-                            exit(1)
-                        shared_matrix[shared_matrix[:, start_node] > 0, start_node] = max_chain_shared.value
-                        
-                        aux = shared_matrix[:,start_node]
-                        logging.info("MAX UPDATE LOOP: concluded node " + str(start_node) +", max " + str(max_chain_shared.value))
-                        with open(r'previous_run\array.npy', 'wb') as file:    
-                            np.save(r'previous_run\array.npy', shared_matrix)
-
-                        with open(r'previous_run\max_update_node.bin', 'wb') as file:
-                            file.write(start_node.to_bytes(32, byteorder='big'))
-                    except Exception as e:
-                        #NOTE
-                        logging.error(f"Error saving the matrix: {e}")
+        for starting_node in chains_by_node_max_update:
 
 
+            chain = starting_node[1].pop()
+            starting_index = chain[0]
+            id_chain =  chain[1]
+            tag_id_chain =  chain[2]
+            nodes_out =  chain[3]
+            size = chain[4]
+            next_nodes = multiprocessing_max_update.get_next_nodes(shared_matrix, starting_index ,nodes_out, size, 1)
 
-            if start_node >= 1040:
+            if next_nodes.size >= 1:
+                chains =[(
+                node,
+                id_chain + (nodes[node][0],),
+                tag_id_chain + (nodes[node][1],),
+                nodes_out | matrix_out[node,:],
+                size + 1) for node in next_nodes]   
+                logging.info("MAX UPDATE LOOP: starting node - "+ str(starting_node[0]) +", id - " + str(chain[1][0])) 
+            else:
+                # the node connect to no other node so go to next
+                continue
+            
+
+            for chain in chains:
+                
+                # Only update max of edge if it was done in the previous run
+                if (starting_node[0] == previous_run_node) & (chain[0] < previous_run_connectingnode):
+                    continue
+
+
+                max_chain_shared.value = 1
+                task_stack.extend([chain])
+                connection_index = chain[0]
+                max_local = 1
+                task_counter.value = 0
+                counter = 0
+
+                
+
+                results = [pool.apply_async(multiprocessing_max_update.max_update, args=(i,)) for i in range(settings["number_processes"])]
+
+                for result in results:
+                    result.get()
+                            
+                # Update the the max of the node in the shared matrix and save the matrix
+                if max_chain_shared.value >= 2:
+                    with matrix_lock:
+                        try:
+                            old_max = shared_matrix[starting_index, connection_index]
+                            # the matrix has the max values of the next chain the new max the the max -1
+                            # because is the max value i can add to starting node by following that node 
+                            new_max = max_chain_shared.value - 1
+                            print("before " + str(old_max))
+                            print("after " + str(new_max))
+
+                            #the old > 0 bit is because if there no other node that conects to it max was not calculated
+                            # tecnically I don't even need to update the max of this node the no other node that connects to it
+                            if (old_max < new_max) & (old_max > 0):
+                                logging.error("start relations matrix setup logic is incorrect")
+                                exit(1)
+                            shared_matrix[starting_index, connection_index] = new_max
+                            
+
+                            logging.info("MAX UPDATE LOOP: concluded edge " + str(starting_index)+" to " +
+                                          str(connection_index) + ", max " + str(new_max))
+                            
+                            with open(r'previous_run\array.npy', 'wb') as file:    
+                                np.save(r'previous_run\array.npy', shared_matrix)
+                            with open(r'previous_run\max_update_conecting_node.bin', 'wb') as file:
+                                file.write(int(connection_index).to_bytes(32, byteorder='big'))
+                            #TODO i don't need to this one every time i update an edge max
+                            with open(r'previous_run\max_update_node.bin', 'wb') as file:
+                                file.write(starting_index.to_bytes(32, byteorder='big'))
+
+                        except Exception as e:
+                            #NOTE
+                            logging.error(f"Error saving the matrix: {e}")
+        
+
+            if starting_index >= 1040:
                 t2 = time.time()
-                print(t2-t1)
+                print(t2-t1)                                                                                                                                        
                 break
 
 
@@ -112,7 +151,8 @@ def start_multiprocesses(chains_by_node_main_loop, chains_by_node_max_update, no
 
 
 
-def starting_child(nodes, nodes_size, matrix, matrix_out, chains_by_node_main_loop, chains_by_node_max_update, settings):
+def starting_child(nodes, nodes_size, matrix, matrix_out, chains_by_node_main_loop, 
+                   chains_by_node_max_update, settings, previous_run_node, previous_run_connectingnode):
     """Start child processes to handle chains."""
 
     #setting up shared variables to be used across process
@@ -136,6 +176,7 @@ def starting_child(nodes, nodes_size, matrix, matrix_out, chains_by_node_main_lo
     shared_vars = (boolean_matrix_mask, matrix_shared_array, task_stack,
                     task_counter, max_chain_shared, matrix_lock, chain_lock)
 
-    start_multiprocesses(chains_by_node_main_loop, chains_by_node_max_update, nodes_size, nodes, matrix_out, settings, shared_vars)
+    start_multiprocesses(chains_by_node_main_loop, chains_by_node_max_update, nodes_size, nodes,
+                          matrix_out, settings, shared_vars, previous_run_node, previous_run_connectingnode)
 
     manager.shutdown()

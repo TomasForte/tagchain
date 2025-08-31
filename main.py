@@ -42,7 +42,7 @@ def parse_arguments():
                         action="store_false", 
                         help="continue where the last run left off")
     parser.add_argument("-r", "--reverse_main_loop", 
-                        action="store_false", 
+                        action="store_false",
                         help="reverse the order of the main loop oldest to newest")
     args = parser.parse_args()
 
@@ -54,6 +54,7 @@ def parse_arguments():
         parser.error("The batch size must be greater than 0.")
 
     return args
+
 
 def validate_previous_run(folder_path, continue_previous_run):
     """Validate content of the previous run folder based on the continue_previous_run flag."""
@@ -126,6 +127,7 @@ def resume_previous_run(folder_path, chains_by_node, nodes_size, df):
     start_main_loop_node_file = r'previous_run\main_loop_node_newest.bin'
     end_main_loop_node_file = r'previous_run\main_loop_node_oldest.bin'
     start_max_update_node_file = r'previous_run\max_update_node.bin'
+    start_max_update_connecting_node_file = r'previous_run\max_update_conecting_node.bin'
     end_main_loop_node = None
     start_main_loop_node = None
     # load relations matrix from previous run
@@ -144,7 +146,15 @@ def resume_previous_run(folder_path, chains_by_node, nodes_size, df):
     except FileNotFoundError:
         logging.error("max_update node not found")
         exit(1)
+    
+    try:
+        with open(start_max_update_connecting_node_file, 'rb') as file:
+                start_max_update_connecting_node = int.from_bytes(file.read(32), byteorder='big')
+    except FileNotFoundError:
+        logging.error("max_update node not found")
+        exit(1)
 
+    start_max_update_connecting_node_file
     # Load the last node of the main_loop loop
     if os.path.exists( start_main_loop_node_file):
         try:
@@ -207,7 +217,7 @@ def resume_previous_run(folder_path, chains_by_node, nodes_size, df):
     if start_max_update_node > 0:
         index_max_update = next((i for i, chain in enumerate(chains_by_node) if chain[0] == start_max_update_node), None)
         if index_max_update is not None:
-            chains_by_node_max_update = chains_by_node[index_max_update + 1:]
+            chains_by_node_max_update = chains_by_node[index_max_update:]
             logging.info("Starting max_update from node " + str(chains_by_node_max_update[0][0]) + ", id - " + str(chains_by_node_max_update[0][1][0][1][0]))
         else:
             logging.error("Starting node of max_update not found in chains_by_node.")
@@ -215,7 +225,7 @@ def resume_previous_run(folder_path, chains_by_node, nodes_size, df):
     else:
         chains_by_node_max_update = chains_by_node
 
-    return matrix, chains_by_node_main_loop, chains_by_node_max_update
+    return matrix, chains_by_node_main_loop, chains_by_node_max_update, start_max_update_node, start_max_update_connecting_node
 
 
 
@@ -254,11 +264,13 @@ def main():
     #Load data from the previous run if the continue_previous_run flag is set
     if args.continuepreviousrun:
         logging.info("Load data from previous run...")
-        matrix, chains_by_node_main_loop, chains_by_node_max_update = resume_previous_run(folder_path, chains_by_node, nodes_size, df_relations)
+        matrix, chains_by_node_main_loop, chains_by_node_max_update, start_max_update_node, start_max_update_connecting_node = resume_previous_run(folder_path, chains_by_node, nodes_size, df_relations)
     else:
         matrix = setup.get_matrix(df_relations, nodes_size)
         chains_by_node_main_loop = chains_by_node
         chains_by_node_max_update = chains_by_node
+        start_max_update_node = 0
+        start_max_update_connecting_node = 0 
 
     
     setting = {"wanted_chain": args.wantedchainsize,
@@ -271,7 +283,8 @@ def main():
 
     logging.info("Starting multiprossesses aka problems...") 
     child_handling.starting_child(
-        nodes, nodes_size, matrix, matrix_out, chains_by_node_main_loop, chains_by_node_max_update, setting)
+        nodes, nodes_size, matrix, matrix_out, chains_by_node_main_loop, chains_by_node_max_update,
+          setting, start_max_update_node , start_max_update_connecting_node)
 
 
 if __name__ == "__main__":

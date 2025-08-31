@@ -11,7 +11,7 @@ def build_column_name(n):
 
 def update_relations_df_max(df, matrix, starting):
     for n in range(0, starting):
-        max = matrix[:, n].max()
+        max = matrix[n, :].max()
         if max > 2:
             df.loc[df["node_id1"] == n, "max_chain"]= max
 
@@ -28,6 +28,8 @@ def update_max(df, matrix, starting = 0):
     df["max_chain"] = 2
     if starting > 0:
         df = update_relations_df_max(df, matrix, starting)
+    
+    test = df[df["node_id1"] == 400]
     #TODO Think of better will to do this. I don't like looping df
     list_nodes = sorted(df[df["node_id1"] > starting]["node_id1"].unique())
     for node in list_nodes:
@@ -63,12 +65,12 @@ def update_max(df, matrix, starting = 0):
         if max_node > 2:
             df.loc[df["node_id1"] == node, 'max_chain'] = max_node
 
-
-
+    
+    row_max = np.amax(matrix, axis=1)
     #update the relations matrix the max_chain of the nodes
-    max_chain_values = df.groupby("node_id1")["max_chain"].max()
+    max_chain_values = df[df["node_id1"] > starting].groupby("node_id1")["max_chain"].max()
     for  node_id, max_value in max_chain_values.items():
         print("node_id: "+ str(node_id) + "max " + str(max_value))
-        matrix[matrix[:, node_id] > 0, node_id] = max_value
+        matrix[node_id, matrix[node_id, :] > 0] = max_value
 
     return matrix

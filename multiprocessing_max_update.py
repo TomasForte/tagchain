@@ -24,6 +24,15 @@ def error_callback (e):
 def update_max():
     pass
 
+def get_next_nodes(shared_matrix, chain_index,nodes_out, size, local_max):
+
+    threshold = local_max - size
+    mask = (shared_matrix[chain_index,:] > threshold) & (~nodes_out)
+    next_nodes = mask.nonzero()[0]
+    return next_nodes
+
+
+
 
 def init_arr(task_stack, boolean_matrix_mask, nodes, shared_matrix_array, matrix_out, task_counter, max_chain, chain_lock, batch_size, number_processes):
     #NOTE although task_stack is no a constant i decided to pass as global variable to avoid having to pass a big list between process 
@@ -65,7 +74,7 @@ def max_update(process_number):
         # profiler = cProfile.Profile()
         # profiler.enable()
         counter = 1
-        local_max = 1
+        local_max = 2
         chains = []
         while True:
 
@@ -96,9 +105,7 @@ def max_update(process_number):
                         size = chain[4]
                         #get the nodes where is possible to have a chain greater than the chain value
 
-                        threshold = local_max - size
-                        mask = (shared_matrix[chain_index,:] > threshold) & (~nodes_out)
-                        next_nodes = mask.nonzero()[0]
+                        next_nodes = get_next_nodes(shared_matrix, chain_index,nodes_out, size, local_max)
                         n_next_nodes = next_nodes.size
                         counter += 1
 
@@ -149,7 +156,6 @@ def max_update(process_number):
                         if task_stack:
                             try:
                                 chains = [task_stack.pop()]
-                                logging.info("process " + str(process_number) + " local stack filler tasks - " + str(len(task_stack)))  
                             except:
                                 with task_counter.get_lock():
                                     task_counter.value -= 1
@@ -163,7 +169,6 @@ def max_update(process_number):
                 break
 
             time.sleep(0.1)
-            print("bob")
 
         
 
